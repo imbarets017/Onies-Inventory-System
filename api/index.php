@@ -159,10 +159,11 @@ function upsertRawMaterial(PDO $pdo, array $row): void
     $eoq = (float) ($row['eoq'] ?? $calculated['eoq']);
 
     $stmt = $pdo->prepare(
-        'INSERT INTO raw_materials (material_name, category, unit_cost, beginning_stock, received, usage_gross, ending_stock, ending_value, daily_usage, annual_demand, lead_time_days, safety_stock_factor, reorder_point, holding_cost, ordering_cost, eoq, status)
-         VALUES (:material_name, :category, :unit_cost, :beginning_stock, :received, :usage_gross, :ending_stock, :ending_value, :daily_usage, :annual_demand, :lead_time_days, :safety_stock_factor, :reorder_point, :holding_cost, :ordering_cost, :eoq, :status)
+        'INSERT INTO raw_materials (material_name, category, unit, unit_cost, beginning_stock, received, usage_gross, ending_stock, ending_value, daily_usage, annual_demand, lead_time_days, safety_stock_factor, reorder_point, holding_cost, ordering_cost, eoq, status)
+         VALUES (:material_name, :category, :unit, :unit_cost, :beginning_stock, :received, :usage_gross, :ending_stock, :ending_value, :daily_usage, :annual_demand, :lead_time_days, :safety_stock_factor, :reorder_point, :holding_cost, :ordering_cost, :eoq, :status)
          ON DUPLICATE KEY UPDATE
             category = VALUES(category),
+            unit = VALUES(unit),
             unit_cost = VALUES(unit_cost),
             beginning_stock = VALUES(beginning_stock),
             received = VALUES(received),
@@ -184,6 +185,7 @@ function upsertRawMaterial(PDO $pdo, array $row): void
     $stmt->execute([
         ':material_name' => $materialName,
         ':category' => (string) ($row['category'] ?? 'General'),
+        ':unit' => (string) ($row['unit'] ?? 'unit'),
         ':unit_cost' => $unitCost,
         ':beginning_stock' => $beginningStock,
         ':received' => $received,

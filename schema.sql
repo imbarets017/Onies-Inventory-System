@@ -13,6 +13,7 @@ CREATE TABLE raw_materials (
     id INT PRIMARY KEY AUTO_INCREMENT,
     material_name VARCHAR(100) NOT NULL UNIQUE,
     category VARCHAR(50) NOT NULL,
+    unit VARCHAR(30) NOT NULL DEFAULT 'unit',
     unit_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
     beginning_stock DECIMAL(12,2) NOT NULL DEFAULT 0,
     received DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -91,7 +92,7 @@ CREATE TABLE bom_items (
     unit_cost_snapshot DECIMAL(12,2) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_bom_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-    CONSTRAINT fk_bom_material FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_bom_material FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE CASCADE,
     UNIQUE KEY uq_bom_product_material (product_id, raw_material_id)
 );
 
