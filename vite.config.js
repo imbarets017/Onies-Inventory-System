@@ -9,12 +9,16 @@ export default defineConfig({
     allowedHosts: [
       'localhost',
       '127.0.0.1',
-      'unworried-recess-stipend.ngrok-free.dev',
+      '0.0.0.0',
+      '::1',
+      '[::1]',
       '.ngrok-free.app',
       '.ngrok-free.dev',
       '.ngrok.io',
       '.loca.lt',
       '.trycloudflare.com',
+      '.github.dev',
+      'localhost.localdomain',
     ],
     proxy: {
       '/api': {

@@ -283,6 +283,7 @@ const normalizeLiveFinishedGoodRow = (row = {}) => ({
 
 const normalizeLiveCostingRow = (row = {}) => ({
   ...row,
+  id: row.id ?? null,
   sku: row.sku ?? row.product ?? 'NEW',
   product_name: row.product_name ?? row.style ?? row.product ?? 'Imported Product',
   direct_material_cost: Number(row.direct_material_cost ?? 0),
@@ -292,6 +293,13 @@ const normalizeLiveCostingRow = (row = {}) => ({
   selling_price: Number(row.selling_price ?? 0),
   gross_profit: Number(row.gross_profit ?? 0),
   gross_margin_pct: Number(row.gross_margin_pct ?? 0),
+  selected_material_ids: Array.isArray(row.selected_material_ids) ? row.selected_material_ids.map(Number) : [],
+  materials: Array.isArray(row.materials) ? row.materials.map((material) => ({
+    ...material,
+    raw_material_id: Number(material.raw_material_id ?? material.id ?? 0),
+    unit_cost_snapshot: Number(material.unit_cost_snapshot ?? material.unit_cost ?? 0),
+    quantity: Number(material.quantity ?? 1),
+  })) : [],
 });
 
 const normalizeLiveWipRow = (row = {}) => ({
@@ -734,6 +742,163 @@ function TableCard({ title, subtitle, children }) {
   );
 }
 
+function BomModal({ open, onClose, form, onChange, onSave, rawMaterials }) {
+  if (!open) {
+    return null;
+  }
+
+  const materialCost = rawMaterials
+    .filter((material) => form.selected_material_ids.includes(Number(material.id)))
+    .reduce((sum, material) => sum + Number(material.unit_cost ?? 0), 0);
+
+  const totalCost = materialCost + Number(form.direct_labor_cost ?? 0) + Number(form.overhead_cost ?? 0);
+  const grossProfit = Number(form.selling_price ?? 0) - totalCost;
+  const grossMargin = Number(form.selling_price ?? 0) > 0 ? (grossProfit / Number(form.selling_price ?? 0)) * 100 : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-xl font-semibold text-slate-900">{form.id ? 'Edit BOM & Costing' : 'Add BOM & Costing'}</h3>
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700">Close</button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="md:col-span-2 block text-sm font-medium text-slate-700">
+            Product Name
+            <input
+              type="text"
+              value={form.product_name}
+              onChange={(event) => onChange('product_name', event.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-400"
+              placeholder="e.g. Basic Slipper"
+            />
+          </label>
+
+          <div className="md:col-span-2 rounded-xl border border-slate-200 p-3">
+            <p className="mb-2 text-sm font-semibold text-slate-700">Select raw materials</p>
+            <div className="grid gap-2 md:grid-cols-2">
+              {rawMaterials.map((material) => {
+                const checked = form.selected_material_ids.includes(Number(material.id));
+                return (
+                  <label key={material.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => onChange('selected_material_ids', checked ? form.selected_material_ids.filter((id) => id !== Number(material.id)) : [...form.selected_material_ids, Number(material.id)])}
+                    />
+                    <span>{material.material_name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Material Cost
+            <input
+              type="number"
+              value={materialCost}
+              readOnly
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Labor Cost
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.direct_labor_cost}
+              onChange={(event) => onChange('direct_labor_cost', Number(event.target.value || 0))}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Overhead
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.overhead_cost}
+              onChange={(event) => onChange('overhead_cost', Number(event.target.value || 0))}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Total Cost
+            <input
+              type="number"
+              value={totalCost}
+              readOnly
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Selling Price
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.selling_price}
+              onChange={(event) => onChange('selling_price', Number(event.target.value || 0))}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Gross Profit
+            <input
+              type="number"
+              value={grossProfit}
+              readOnly
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700 md:col-span-2">
+            Gross Margin
+            <input
+              type="number"
+              value={grossMargin}
+              readOnly
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+            />
+          </label>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Cancel</button>
+          <button type="button" onClick={onSave} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">{form.id ? 'Save Changes' : 'Add BOM'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteBomModal({ open, onClose, onConfirm, itemName }) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <h3 className="text-xl font-semibold text-slate-900">Delete BOM item</h3>
+        <p className="mt-2 text-sm text-slate-600">Are you sure you want to delete <span className="font-semibold text-slate-800">{itemName}</span>? This action cannot be undone.</p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Cancel</button>
+          <button type="button" onClick={onConfirm} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white">Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [rawMaterials, setRawMaterials] = useState(rawMaterialRows);
   const [finishedGoods, setFinishedGoods] = useState(finishedGoodRows);
@@ -755,8 +920,153 @@ function App() {
   const [dataSource, setDataSource] = useState('workbook');
   const [activeTab, setActiveTab] = useState('raw-materials');
   const [importMessage, setImportMessage] = useState('');
+  const [bomModalOpen, setBomModalOpen] = useState(false);
+  const [bomDeleteOpen, setBomDeleteOpen] = useState(false);
+  const [bomEditingId, setBomEditingId] = useState(null);
+  const [bomDeleteRow, setBomDeleteRow] = useState(null);
+  const [bomForm, setBomForm] = useState({
+    id: null,
+    product_name: '',
+    selected_material_ids: [],
+    direct_labor_cost: 0,
+    overhead_cost: 0,
+    selling_price: 0,
+  });
+
+  const getBomFormTotals = (formState = bomForm) => {
+    const selectedMaterialCost = rawMaterials
+      .filter((material) => formState.selected_material_ids.includes(Number(material.id)))
+      .reduce((sum, material) => sum + Number(material.unit_cost ?? 0), 0);
+
+    const laborCost = Number(formState.direct_labor_cost ?? 0);
+    const overheadCost = Number(formState.overhead_cost ?? 0);
+    const sellingPrice = Number(formState.selling_price ?? 0);
+    const totalCost = selectedMaterialCost + laborCost + overheadCost;
+    const grossProfit = sellingPrice - totalCost;
+    const grossMargin = sellingPrice > 0 ? (grossProfit / sellingPrice) * 100 : 0;
+
+    return { selectedMaterialCost, totalCost, grossProfit, grossMargin };
+  };
+
+  const openBomAddModal = () => {
+    setBomEditingId(null);
+    setBomForm({
+      id: null,
+      product_name: '',
+      selected_material_ids: [],
+      direct_labor_cost: 0,
+      overhead_cost: 0,
+      selling_price: 0,
+    });
+    setBomModalOpen(true);
+  };
+
+  const openBomEditModal = (row) => {
+    const selectedMaterialIds = Array.isArray(row.selected_material_ids) && row.selected_material_ids.length > 0
+      ? row.selected_material_ids.map(Number)
+      : Array.isArray(row.materials)
+        ? row.materials.map((material) => Number(material.raw_material_id ?? material.id ?? 0)).filter(Boolean)
+        : [];
+
+    setBomEditingId(Number(row.id ?? row.product_id ?? 0));
+    setBomForm({
+      id: Number(row.id ?? row.product_id ?? 0),
+      product_name: row.product_name ?? '',
+      selected_material_ids: selectedMaterialIds,
+      direct_labor_cost: Number(row.direct_labor_cost ?? 0),
+      overhead_cost: Number(row.overhead_cost ?? 0),
+      selling_price: Number(row.selling_price ?? 0),
+    });
+    setBomModalOpen(true);
+  };
+
+  const saveBomForm = async () => {
+    if (!bomForm.product_name.trim()) {
+      setImportMessage('Please enter a product name before saving the BOM.');
+      return;
+    }
+
+    if (!bomForm.selected_material_ids.length) {
+      setImportMessage('Please select at least one raw material for the BOM.');
+      return;
+    }
+
+    const materialPayload = bomForm.selected_material_ids.map((rawMaterialId) => {
+      const material = rawMaterials.find((item) => Number(item.id) === Number(rawMaterialId));
+      return {
+        raw_material_id: Number(rawMaterialId),
+        material_name: material?.material_name ?? '',
+        quantity: 1,
+        unit_cost_snapshot: Number(material?.unit_cost ?? 0),
+      };
+    });
+
+    const payload = {
+      action: bomEditingId ? 'update' : 'create',
+      id: bomEditingId || null,
+      product_name: bomForm.product_name,
+      direct_labor_cost: Number(bomForm.direct_labor_cost ?? 0),
+      overhead_cost: Number(bomForm.overhead_cost ?? 0),
+      selling_price: Number(bomForm.selling_price ?? 0),
+      waste_percentage: 0,
+      materials: materialPayload,
+    };
+
+    try {
+      const response = await fetch(`${API_BASE}/bom-costing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.message || 'Failed to save BOM item.');
+      }
+
+      await refreshDashboardData();
+      setBomModalOpen(false);
+      setBomEditingId(null);
+      setBomForm({
+        id: null,
+        product_name: '',
+        selected_material_ids: [],
+        direct_labor_cost: 0,
+        overhead_cost: 0,
+        selling_price: 0,
+      });
+      setImportMessage('BOM item saved successfully.');
+    } catch (saveError) {
+      setImportMessage(saveError.message || 'Unable to save BOM item.');
+    }
+  };
+
+  const deleteBomItem = async (row) => {
+    try {
+      const response = await fetch(`${API_BASE}/bom-costing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: Number(row.id ?? row.product_id ?? 0) }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.message || 'Failed to delete BOM item.');
+      }
+
+      await refreshDashboardData();
+      setBomDeleteOpen(false);
+      setBomDeleteRow(null);
+      setImportMessage('BOM item deleted successfully.');
+    } catch (deleteError) {
+      setImportMessage(deleteError.message || 'Unable to delete BOM item.');
+    }
+  };
 
   const refreshDashboardData = async () => {
+
     try {
       const [rawData, finishedData, costingData, financeData] = await Promise.all([
         fetchJson('/raw-materials'),
@@ -1082,10 +1392,14 @@ function App() {
     if (activeTab === 'bom-costing') {
       return (
         <TableCard title="BOM & Costing" subtitle="Material cost, labor, overhead, gross profit, and gross margin">
+          <div className="mb-4 flex justify-end">
+            <button type="button" onClick={openBomAddModal} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Add BOM</button>
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead>
                 <tr className="text-slate-500">
+                  <th className="pb-3 pr-3 font-medium">Actions</th>
                   <th className="pb-3 pr-3 font-medium">Product</th>
                   <th className="pb-3 pr-3 font-medium">Materials</th>
                   <th className="pb-3 pr-3 font-medium">Labor</th>
@@ -1098,7 +1412,13 @@ function App() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {costingRows.map((row) => (
-                  <tr key={row.sku || row.product_name || row.style} className="align-middle">
+                  <tr key={String(row.id ?? row.sku ?? row.product_name ?? row.style ?? 'bom-item')} className="align-middle">
+                    <td className="py-3 pr-3">
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => openBomEditModal(row)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">Edit</button>
+                        <button type="button" onClick={() => { setBomDeleteRow(row); setBomDeleteOpen(true); }} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700">Delete</button>
+                      </div>
+                    </td>
                     <td className="py-3 pr-3 font-medium text-slate-800">{row.product_name || row.style}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.direct_material_cost ?? row.materialCost ?? 0)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.direct_labor_cost ?? row.laborPerPair ?? 0)}</td>
@@ -1190,6 +1510,29 @@ function App() {
             Loading live inventory data from the MySQL API…
           </div>
         ) : null}
+
+        <BomModal
+          open={bomModalOpen}
+          onClose={() => setBomModalOpen(false)}
+          form={bomForm}
+          rawMaterials={rawMaterials}
+          onChange={(field, value) => {
+            if (field === 'selected_material_ids') {
+              setBomForm((current) => ({ ...current, selected_material_ids: value }));
+              return;
+            }
+
+            setBomForm((current) => ({ ...current, [field]: value }));
+          }}
+          onSave={saveBomForm}
+        />
+
+        <DeleteBomModal
+          open={bomDeleteOpen}
+          onClose={() => { setBomDeleteOpen(false); setBomDeleteRow(null); }}
+          itemName={bomDeleteRow?.product_name ?? 'this BOM item'}
+          onConfirm={() => deleteBomItem(bomDeleteRow)}
+        />
 
         <nav className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-soft">
           {inventoryTabs.map((tab) => (

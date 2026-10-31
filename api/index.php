@@ -357,7 +357,7 @@ function upsertWip(PDO $pdo, array $row): void
 
 function calculateBomCostingSnapshot(PDO $pdo): array
 {
-    $sql = "
+    $productSql = "
         SELECT
             p.id,
             p.sku,
@@ -365,43 +365,128 @@ function calculateBomCostingSnapshot(PDO $pdo): array
             p.selling_price,
             p.direct_labor_cost,
             p.overhead_cost,
-            p.waste_percentage,
-            ROUND(COALESCE(SUM(bi.quantity * rm.unit_cost), 0), 2) AS direct_material_cost,
-            ROUND(COALESCE(SUM(bi.quantity * rm.unit_cost), 0) * (1 + (p.waste_percentage / 100)), 2) AS adjusted_material_cost
+            p.waste_percentage
         FROM products p
-        LEFT JOIN bom_items bi ON bi.product_id = p.id
-        LEFT JOIN raw_materials rm ON rm.id = bi.raw_material_id
-        GROUP BY p.id, p.sku, p.product_name, p.selling_price, p.direct_labor_cost, p.overhead_cost, p.waste_percentage
         ORDER BY p.product_name ASC
     ";
 
-    $rows = $pdo->query($sql)->fetchAll();
+    $productRows = $pdo->query($productSql)->fetchAll();
     $result = [];
 
-    foreach ($rows as $row) {
-        $directMaterialCost = (float) ($row['adjusted_material_cost'] ?? 0);
-        $directLaborCost = (float) ($row['direct_labor_cost'] ?? 0);
-        $overheadCost = (float) ($row['overhead_cost'] ?? 0);
-        $sellingPrice = (float) ($row['selling_price'] ?? 0);
-        $totalUnitCost = $directMaterialCost + $directLaborCost + $overheadCost;
+    foreach ($productRows as $productRow) {
+        $materialSql = "
+            SELECT
+                bi.id,
+                bi.product_id,
+                bi.raw_material_id,
+                rm.material_name,
+                bi.quantity,
+                bi.unit_cost_snapshot,
+                ROUND(bi.quantity * bi.unit_cost_snapshot, 2) AS material_total
+            FROM bom_items bi
+            INNER JOIN raw_materials rm ON rm.id = bi.raw_material_id
+            WHERE bi.product_id = :product_id
+            ORDER BY rm.material_name ASC
+        ";
+
+        $materialStmt = $pdo->prepare($materialSql);
+        $materialStmt->execute([':product_id' => (int) $productRow['id']]);
+        $materialRows = $materialStmt->fetchAll();
+
+        $directMaterialCost = 0.0;
+        $materialDetails = [];
+
+        foreach ($materialRows as $materialRow) {
+            $materialValue = (float) ($materialRow['material_total'] ?? 0);
+            $directMaterialCost += $materialValue;
+            $materialDetails[] = [
+                'id' => (int) $materialRow['id'],
+                'raw_material_id' => (int) $materialRow['raw_material_id'],
+                'material_name' => $materialRow['material_name'],
+                'quantity' => (float) ($materialRow['quantity'] ?? 0),
+                'unit_cost_snapshot' => (float) ($materialRow['unit_cost_snapshot'] ?? 0),
+                'material_total' => round($materialValue, 2),
+            ];
+        }
+
+        $adjustedMaterialCost = $directMaterialCost * (1 + ((float) ($productRow['waste_percentage'] ?? 0) / 100));
+        $directLaborCost = (float) ($productRow['direct_labor_cost'] ?? 0);
+        $overheadCost = (float) ($productRow['overhead_cost'] ?? 0);
+        $sellingPrice = (float) ($productRow['selling_price'] ?? 0);
+        $totalUnitCost = $adjustedMaterialCost + $directLaborCost + $overheadCost;
         $grossProfit = $sellingPrice - $totalUnitCost;
         $grossMargin = $sellingPrice > 0 ? ($grossProfit / $sellingPrice) * 100 : 0;
 
         $result[] = [
-            'id' => (int) $row['id'],
-            'sku' => $row['sku'],
-            'product_name' => $row['product_name'],
-            'direct_material_cost' => round($directMaterialCost, 2),
+            'id' => (int) $productRow['id'],
+            'sku' => $productRow['sku'],
+            'product_name' => $productRow['product_name'],
+            'direct_material_cost' => round($adjustedMaterialCost, 2),
             'direct_labor_cost' => round($directLaborCost, 2),
             'overhead_cost' => round($overheadCost, 2),
             'total_unit_cost' => round($totalUnitCost, 2),
             'selling_price' => round($sellingPrice, 2),
             'gross_profit' => round($grossProfit, 2),
             'gross_margin_pct' => round($grossMargin, 2),
+            'materials' => $materialDetails,
+            'selected_material_ids' => array_map(fn ($item) => (int) $item['raw_material_id'], $materialDetails),
         ];
     }
 
     return $result;
+}
+
+function resolveBomProductSku(PDO $pdo, string $productName): string
+{
+    $sku = preg_replace('/[^A-Za-z0-9]+/', '-', strtolower(trim($productName)));
+    $sku = trim($sku, '-');
+
+    if ($sku === '') {
+        $sku = 'BOM-' . (string) time();
+    }
+
+    $candidate = $sku;
+    $suffix = 1;
+
+    while (true) {
+        $stmt = $pdo->prepare('SELECT id FROM products WHERE sku = :sku LIMIT 1');
+        $stmt->execute([':sku' => $candidate]);
+
+        if ($stmt->fetchColumn() === false) {
+            return $candidate;
+        }
+
+        $candidate = $sku . '-' . $suffix;
+        $suffix++;
+    }
+}
+
+function upsertBomItemsForProduct(PDO $pdo, int $productId, array $selectedMaterials): void
+{
+    $deleteStmt = $pdo->prepare('DELETE FROM bom_items WHERE product_id = :product_id');
+    $deleteStmt->execute([':product_id' => $productId]);
+
+    foreach ($selectedMaterials as $material) {
+        $rawMaterialId = (int) ($material['raw_material_id'] ?? 0);
+        $quantity = (float) ($material['quantity'] ?? 1);
+        $unitCostSnapshot = (float) ($material['unit_cost_snapshot'] ?? 0);
+
+        if ($rawMaterialId <= 0) {
+            continue;
+        }
+
+        $insertStmt = $pdo->prepare(
+            'INSERT INTO bom_items (product_id, raw_material_id, quantity, unit_cost_snapshot)
+             VALUES (:product_id, :raw_material_id, :quantity, :unit_cost_snapshot)'
+        );
+
+        $insertStmt->execute([
+            ':product_id' => $productId,
+            ':raw_material_id' => $rawMaterialId,
+            ':quantity' => $quantity,
+            ':unit_cost_snapshot' => $unitCostSnapshot,
+        ]);
+    }
 }
 
 function handleRawMaterials(): void
@@ -476,13 +561,177 @@ function handleBomCosting(): void
 
     if ($method === 'POST') {
         $payload = parseJsonBody();
-        $rows = deduplicateRowsByKey(normalizeImportRows($payload), 'sku', 'product_name');
 
-        if (empty($rows)) {
+        if (isset($payload['action'])) {
+            $action = strtolower((string) $payload['action']);
+
+            if ($action === 'create' || $action === 'update') {
+                $productName = trim((string) ($payload['product_name'] ?? $payload['name'] ?? ''));
+                $productId = isset($payload['id']) ? (int) $payload['id'] : null;
+
+                if ($productName === '') {
+                    jsonResponse(['success' => false, 'message' => 'Product name is required.'], 400);
+                }
+
+                if ($productId !== null && $productId > 0) {
+                    $existing = $pdo->prepare('SELECT id, sku FROM products WHERE id = :id LIMIT 1');
+                    $existing->execute([':id' => $productId]);
+                    $existingRow = $existing->fetch();
+
+                    if ($existingRow === false) {
+                        jsonResponse(['success' => false, 'message' => 'Selected BOM item was not found.'], 404);
+                    }
+
+                    $productId = (int) $existingRow['id'];
+                    $sku = (string) $existingRow['sku'];
+                } else {
+                    $sku = resolveBomProductSku($pdo, $productName);
+                    $productId = null;
+                }
+
+                if ($productId === null) {
+                    $insertStmt = $pdo->prepare(
+                        'INSERT INTO products (sku, product_name, selling_price, direct_labor_cost, overhead_cost, waste_percentage, description)
+                         VALUES (:sku, :product_name, :selling_price, :direct_labor_cost, :overhead_cost, :waste_percentage, :description)'
+                    );
+                    $insertStmt->execute([
+                        ':sku' => $sku,
+                        ':product_name' => $productName,
+                        ':selling_price' => (float) ($payload['selling_price'] ?? 0),
+                        ':direct_labor_cost' => (float) ($payload['direct_labor_cost'] ?? 0),
+                        ':overhead_cost' => (float) ($payload['overhead_cost'] ?? 0),
+                        ':waste_percentage' => (float) ($payload['waste_percentage'] ?? 0),
+                        ':description' => 'Manual BOM entry',
+                    ]);
+                    $productId = (int) $pdo->lastInsertId();
+                } else {
+                    $updateStmt = $pdo->prepare(
+                        'UPDATE products
+                         SET product_name = :product_name,
+                             selling_price = :selling_price,
+                             direct_labor_cost = :direct_labor_cost,
+                             overhead_cost = :overhead_cost,
+                             waste_percentage = :waste_percentage,
+                             updated_at = CURRENT_TIMESTAMP
+                         WHERE id = :id'
+                    );
+                    $updateStmt->execute([
+                        ':product_name' => $productName,
+                        ':selling_price' => (float) ($payload['selling_price'] ?? 0),
+                        ':direct_labor_cost' => (float) ($payload['direct_labor_cost'] ?? 0),
+                        ':overhead_cost' => (float) ($payload['overhead_cost'] ?? 0),
+                        ':waste_percentage' => (float) ($payload['waste_percentage'] ?? 0),
+                        ':id' => $productId,
+                    ]);
+                }
+
+                $materials = is_array($payload['materials'] ?? null) ? $payload['materials'] : [];
+                $selectedMaterials = [];
+
+                foreach ($materials as $material) {
+                    $rawMaterialId = (int) ($material['raw_material_id'] ?? 0);
+                    $materialName = trim((string) ($material['material_name'] ?? ''));
+
+                    if ($rawMaterialId <= 0 && $materialName !== '') {
+                        $materialLookup = $pdo->prepare('SELECT id, unit_cost FROM raw_materials WHERE material_name = :material_name LIMIT 1');
+                        $materialLookup->execute([':material_name' => $materialName]);
+                        $materialRow = $materialLookup->fetch();
+
+                        if ($materialRow !== false) {
+                            $rawMaterialId = (int) $materialRow['id'];
+                        }
+                    }
+
+                    if ($rawMaterialId <= 0) {
+                        continue;
+                    }
+
+                    $selectedMaterials[] = [
+                        'raw_material_id' => $rawMaterialId,
+                        'quantity' => (float) ($material['quantity'] ?? 1),
+                        'unit_cost_snapshot' => (float) ($material['unit_cost_snapshot'] ?? $material['unit_cost'] ?? 0),
+                    ];
+                }
+
+                upsertBomItemsForProduct($pdo, $productId, $selectedMaterials);
+
+                jsonResponse([
+                    'success' => true,
+                    'message' => 'BOM item saved.',
+                    'bom_costing' => calculateBomCostingSnapshot($pdo),
+                ]);
+            }
+
+            if ($action === 'delete') {
+                $productId = (int) ($payload['id'] ?? 0);
+
+                if ($productId <= 0) {
+                    jsonResponse(['success' => false, 'message' => 'A BOM item id is required for deletion.'], 400);
+                }
+
+                try {
+                    $pdo->beginTransaction();
+
+                    $pdo->prepare('DELETE FROM bom_items WHERE product_id = :product_id')->execute([':product_id' => $productId]);
+                    $pdo->prepare('DELETE FROM work_in_progress WHERE product_id = :product_id')->execute([':product_id' => $productId]);
+                    $pdo->prepare('DELETE FROM production_costs WHERE product_id = :product_id')->execute([':product_id' => $productId]);
+                    $pdo->prepare('DELETE FROM products WHERE id = :id')->execute([':id' => $productId]);
+
+                    $pdo->commit();
+                } catch (Throwable $exception) {
+                    if ($pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+
+                    jsonResponse([
+                        'success' => false,
+                        'message' => 'Unable to delete BOM item.',
+                        'error' => $exception->getMessage(),
+                    ], 500);
+                }
+
+                jsonResponse([
+                    'success' => true,
+                    'message' => 'BOM item deleted.',
+                    'bom_costing' => calculateBomCostingSnapshot($pdo),
+                ]);
+            }
+
+            if ($action === 'reset') {
+                try {
+                    $pdo->beginTransaction();
+                    $pdo->query('DELETE FROM bom_items');
+                    $pdo->query('DELETE FROM work_in_progress');
+                    $pdo->query('DELETE FROM production_costs');
+                    $pdo->query('DELETE FROM products');
+                    $pdo->commit();
+                } catch (Throwable $exception) {
+                    if ($pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+
+                    jsonResponse([
+                        'success' => false,
+                        'message' => 'Unable to clear BOM data.',
+                        'error' => $exception->getMessage(),
+                    ], 500);
+                }
+
+                jsonResponse([
+                    'success' => true,
+                    'message' => 'BOM data was cleared.',
+                    'bom_costing' => calculateBomCostingSnapshot($pdo),
+                ]);
+            }
+        }
+
+        $payloadRows = deduplicateRowsByKey(normalizeImportRows($payload), 'sku', 'product_name');
+
+        if (empty($payloadRows)) {
             jsonResponse(['success' => false, 'message' => 'No payload provided.'], 400);
         }
 
-        foreach ($rows as $row) {
+        foreach ($payloadRows as $row) {
             if (!is_array($row)) {
                 continue;
             }
@@ -493,7 +742,7 @@ function handleBomCosting(): void
         jsonResponse([
             'success' => true,
             'message' => 'BOM costing updated.',
-            'count' => count($rows),
+            'count' => count($payloadRows),
             'bom_costing' => $bomCosting,
         ]);
     }
