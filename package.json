@@ -1,0 +1,11 @@
+{
+  "name": "onies-inventory-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Onies Inventory System",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "license": "MIT"
+}
