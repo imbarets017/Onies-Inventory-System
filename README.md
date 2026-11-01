@@ -1,62 +1,85 @@
 # Onies Inventory System
 
-This project includes:
+Inventory and production-costing application with a React frontend and Laravel API.
 
-- MySQL schema and seed data in `schema.sql`
-- PHP PDO API service in `api/`
-- React + Tailwind dashboard in `src/`
+## Project structure
 
-## Database
+- `src/` — React dashboard and inventory workflows
+- `backend/` — Laravel API, authentication, authorization, models, and database migrations
+- `backend/database/migrations/` — authoritative database schema and upgrades
 
-Create a local MySQL database and copy the example settings:
+The frontend runs with Vite on port `5173` and proxies `/api` requests to Laravel on port `8000`.
 
-```bash
-cp .env.example .env
+## Requirements
+
+- PHP 8.3 or later and Composer
+- Node.js and npm
+- MySQL
+
+## First-time setup
+
+1. Create a MySQL database and configure `backend/.env` with its connection details:
+
+   ```powershell
+   cd backend
+   Copy-Item .env.example .env
+   ```
+
+2. Install backend dependencies, generate the Laravel application key, and run migrations:
+
+   ```powershell
+   composer install
+   php artisan key:generate
+   php artisan migrate
+   ```
+
+3. In a second terminal at the repository root, install frontend dependencies:
+
+   ```powershell
+   npm install
+   ```
+
+The first account registered through the app becomes the administrator. Register it after starting both servers.
+
+## Run locally
+
+Start the Laravel API from `backend/`:
+
+```powershell
+php artisan serve --host=127.0.0.1 --port=8000
 ```
 
-Then update `.env` with your MySQL credentials:
+Start the frontend from the repository root in another terminal:
 
-```env
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_NAME=slipper_inventory
-DB_USER=root
-DB_PASS=your_mysql_password
-```
-
-Import the SQL file into MySQL:
-
-```bash
-mysql -u root -p < schema.sql
-```
-
-The PHP API automatically loads values from `.env`, so you do not need to export them manually in the shell.
-
-## PHP API
-
-Serve the API locally with PHP's built-in server:
-
-```bash
-cd api
-php -S 127.0.0.1:8000 index.php
-```
-
-Then use routes such as:
-
-- `GET /api/raw-materials`
-- `POST /api/raw-materials`
-- `GET /api/finished-goods`
-- `POST /api/finished-goods`
-- `GET /api/bom-costing`
-- `GET /api/financials/cogm-cogs`
-
-## Frontend
-
-Install dependencies and start the dashboard:
-
-```bash
-npm install
+```powershell
 npm run dev
 ```
 
-The UI is served by Vite on `http://localhost:5173`.
+Open [http://localhost:5173](http://localhost:5173).
+
+## Access levels
+
+- **Admin** — inventory viewing, editing, importing, and deletion; user management
+- **Manager** — inventory viewing, editing, importing, and deletion
+- **Staff** — read-only inventory access
+
+## Database changes
+
+Use Laravel migrations to create or upgrade the schema:
+
+```powershell
+cd backend
+php artisan migrate
+```
+
+Avoid `migrate:fresh` on a database containing inventory data; it drops existing tables. The old SQL bootstrap has been removed because it dropped tables before recreating them.
+
+## Production frontend build
+
+From the repository root:
+
+```powershell
+npm run build
+```
+
+The generated frontend files are written to `dist/`.
