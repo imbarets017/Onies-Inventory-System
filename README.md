@@ -1,58 +1,85 @@
 # Onies Inventory System
 
-This project includes:
+Inventory and production-costing application with a React frontend and Laravel API.
 
-- MySQL schema and seed data in `schema.sql`
-- React + Tailwind dashboard in `src/`
-- Laravel API backend in `backend/`
+## Project structure
 
-## Database
+- `src/` — React dashboard and inventory workflows
+- `backend/` — Laravel API, authentication, authorization, models, and database migrations
+- `backend/database/migrations/` — authoritative database schema and upgrades
 
-The existing local MySQL database is already configured for the project:
+The frontend runs with Vite on port `5173` and proxies `/api` requests to Laravel on port `8000`.
 
-```env
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=slipper_inventory
-DB_USERNAME=root
-DB_PASSWORD=oniesfootwear
-```
+## Requirements
 
-If you need to re-seed the tables, import the SQL file into MySQL from the repo root:
+- PHP 8.3 or later and Composer
+- Node.js and npm
+- MySQL
 
-```bash
-$env:Path += ';C:\Program Files\MySQL\MySQL Server 8.4\bin;C:\Program Files\MySQL\MySQL Server 8.0\bin'
-Get-Content .\schema.sql | mysql -uroot -p'oniesfootwear' slipper_inventory
-```
+## First-time setup
 
-## Laravel API
+1. Create a MySQL database and configure `backend/.env` with its connection details:
 
-The Laravel backend was created in `backend/` and is configured to use the same MySQL database as the existing app.
+   ```powershell
+   cd backend
+   Copy-Item .env.example .env
+   ```
 
-Start the API:
+2. Install backend dependencies, generate the Laravel application key, and run migrations:
 
-```bash
-cd backend
+   ```powershell
+   composer install
+   php artisan key:generate
+   php artisan migrate
+   ```
+
+3. In a second terminal at the repository root, install frontend dependencies:
+
+   ```powershell
+   npm install
+   ```
+
+The first account registered through the app becomes the administrator. Register it after starting both servers.
+
+## Run locally
+
+Start the Laravel API from `backend/`:
+
+```powershell
 php artisan serve --host=127.0.0.1 --port=8000
 ```
 
-Available API routes:
+Start the frontend from the repository root in another terminal:
 
-- `GET /api/raw-materials`
-- `POST /api/raw-materials`
-- `GET /api/finished-goods`
-- `POST /api/finished-goods`
-- `GET /api/bom-costing`
-- `POST /api/bom-costing`
-- `GET /api/financials/cogm-cogs`
-
-## Frontend
-
-Install dependencies and start the dashboard:
-
-```bash
-npm install
+```powershell
 npm run dev
 ```
 
-The UI is served by Vite on `http://localhost:5173` and proxies `/api/*` requests to the Laravel backend at `http://127.0.0.1:8000`.
+Open [http://localhost:5173](http://localhost:5173).
+
+## Access levels
+
+- **Admin** — inventory viewing, editing, importing, and deletion; user management
+- **Manager** — inventory viewing, editing, importing, and deletion
+- **Staff** — read-only inventory access
+
+## Database changes
+
+Use Laravel migrations to create or upgrade the schema:
+
+```powershell
+cd backend
+php artisan migrate
+```
+
+Avoid `migrate:fresh` on a database containing inventory data; it drops existing tables. The old SQL bootstrap has been removed because it dropped tables before recreating them.
+
+## Production frontend build
+
+From the repository root:
+
+```powershell
+npm run build
+```
+
+The generated frontend files are written to `dist/`.

@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import AuthPanel from './components/AuthPanel';
+import RecordModal from './components/RecordModal';
+import UserManagement from './components/UserManagement';
 
 const workingDaysInPeriod = 26;
 const workingDaysPerYear = 300;
@@ -213,6 +216,11 @@ const getRowValue = (row, keys) => {
   return '';
 };
 
+const parseImportedNumber = (value) => {
+  const parsed = Number(String(value ?? '').replace(/[$,\s]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const mapImportedRawMaterial = (row) => {
   const normalized = normalizeImportedRow(row);
 
@@ -220,22 +228,23 @@ const mapImportedRawMaterial = (row) => {
     code: getRowValue(normalized, ['code', 'material_code']) || '',
     material_name: getRowValue(normalized, ['material', 'material_name', 'name']) || 'Imported Material',
     unit: getRowValue(normalized, ['unit']) || 'unit',
-    unit_cost: Number(getRowValue(normalized, ['unit_cost', 'unit_cost_php', 'unit_cost_php_value', 'unit cost']) || 0),
-    beginning_qty: Number(getRowValue(normalized, ['beginning_qty', 'beginning_quantity', 'beginning qty']) || 0),
-    received: Number(getRowValue(normalized, ['received_qty', 'received', 'received qty']) || 0),
-    used: Number(getRowValue(normalized, ['used_qty', 'used', 'used qty']) || 0),
-    ending_qty: Number(getRowValue(normalized, ['ending_qty', 'ending_quantity', 'ending qty']) || 0),
-    inventory_value: Number(getRowValue(normalized, ['inventory_value', 'inventory value']) || 0),
-    avg_daily_usage: Number(getRowValue(normalized, ['average_daily_usage', 'avg_daily_usage', 'average daily usage']) || 0),
-    max_daily_usage: Number(getRowValue(normalized, ['max_daily_usage', 'max daily usage']) || 0),
-    lead_time_days: Number(getRowValue(normalized, ['lead_time_days', 'lead_time', 'lead time days']) || 0),
-    safety_stock: Number(getRowValue(normalized, ['safety_stock', 'safety stock']) || 0),
-    reorder_point: Number(getRowValue(normalized, ['reorder_point', 'reorder point']) || 0),
-    annual_usage: Number(getRowValue(normalized, ['annual_usage', 'annual usage']) || 0),
-    order_cost: Number(getRowValue(normalized, ['order_cost', 'order cost']) || 0),
-    holding_pct: Number(getRowValue(normalized, ['holding_cost_pct', 'holding_pct', 'holding cost %']) || 0),
-    eoq: Number(getRowValue(normalized, ['eoq']) || 0),
-    status: getRowValue(normalized, ['status']) || 'OK',
+    unit_cost: parseImportedNumber(getRowValue(normalized, ['unit_cost', 'unit_cost_php', 'unit_cost_php_value', 'unit cost'])),
+    beginning_stock: parseImportedNumber(getRowValue(normalized, ['beginning_stock', 'beginning_qty', 'beginning_quantity', 'beginning qty'])),
+    received: parseImportedNumber(getRowValue(normalized, ['received_qty', 'received', 'received qty'])),
+    usage_gross: parseImportedNumber(getRowValue(normalized, ['usage_gross', 'used_qty', 'used', 'used qty'])),
+    ending_stock: parseImportedNumber(getRowValue(normalized, ['ending_stock', 'ending_qty', 'ending_quantity', 'ending qty'])),
+    ending_value: parseImportedNumber(getRowValue(normalized, ['ending_value', 'inventory_value', 'inventory value'])),
+    daily_usage: parseImportedNumber(getRowValue(normalized, ['daily_usage', 'average_daily_usage', 'avg_daily_usage', 'average daily usage'])),
+    max_daily_usage: parseImportedNumber(getRowValue(normalized, ['max_daily_usage', 'max daily usage'])),
+    lead_time_days: parseImportedNumber(getRowValue(normalized, ['lead_time_days', 'lead_time', 'lead time days'])),
+    safety_stock: parseImportedNumber(getRowValue(normalized, ['safety_stock', 'safety stock'])),
+    safety_stock_factor: parseImportedNumber(getRowValue(normalized, ['safety_stock_factor', 'safety stock factor'])),
+    reorder_point: parseImportedNumber(getRowValue(normalized, ['reorder_point', 'reorder point'])),
+    annual_demand: parseImportedNumber(getRowValue(normalized, ['annual_demand', 'annual_usage', 'annual usage'])),
+    ordering_cost: parseImportedNumber(getRowValue(normalized, ['ordering_cost', 'order_cost', 'order cost'])),
+    holding_cost: parseImportedNumber(getRowValue(normalized, ['holding_cost', 'holding_pct', 'holding_cost_pct', 'holding cost %', 'holding_cost_yr'])),
+    eoq: parseImportedNumber(getRowValue(normalized, ['eoq'])),
+    status: String(getRowValue(normalized, ['status']) || '').trim().toUpperCase(),
   };
 };
 
@@ -304,7 +313,8 @@ const normalizeLiveCostingRow = (row = {}) => ({
 
 const normalizeLiveWipRow = (row = {}) => ({
   ...row,
-  stage: row.stage ?? 'Imported Stage',
+  stage: row.stage ?? row.batch_name ?? 'Imported Stage',
+  sku: row.sku ?? '',
   beginning_pairs: Number(row.beginning_pairs ?? 0),
   ending_pairs: Number(row.ending_pairs ?? 0),
   avg_cost_per_pair: Number(row.avg_cost_per_pair ?? 0),
@@ -319,18 +329,18 @@ const mapImportedFinishedGood = (row) => {
     sku: getRowValue(normalized, ['sku']) || 'NEW-SKU',
     style: getRowValue(normalized, ['style', 'product_name']) || 'Imported Style',
     size: getRowValue(normalized, ['size']) || 'N/A',
-    unit_cost: Number(getRowValue(normalized, ['unit_cost', 'unit cost']) || 0),
-    beginning_pairs: Number(getRowValue(normalized, ['beginning_pairs', 'beginning pairs']) || 0),
-    produced: Number(getRowValue(normalized, ['produced']) || 0),
-    sold: Number(getRowValue(normalized, ['sold']) || 0),
-    ending_pairs: Number(getRowValue(normalized, ['ending_pairs', 'ending pairs']) || 0),
-    inventory_value: Number(getRowValue(normalized, ['inventory_value', 'inventory value']) || 0),
-    selling_price: Number(getRowValue(normalized, ['selling_price', 'selling price']) || 0),
-    avg_daily_sales: Number(getRowValue(normalized, ['average_daily_sales', 'avg_daily_sales', 'average daily sales']) || 0),
-    lead_time_days: Number(getRowValue(normalized, ['lead_time_days', 'lead time days']) || 0),
-    safety_stock_days: Number(getRowValue(normalized, ['safety_stock_days', 'safety stock days']) || 0),
-    reorder_point: Number(getRowValue(normalized, ['reorder_point', 'reorder point']) || 0),
-    days_of_stock: Number(getRowValue(normalized, ['days_of_stock', 'days of stock']) || 0),
+    unit_cost: parseImportedNumber(getRowValue(normalized, ['unit_cost', 'unit cost'])),
+    beginning_pairs: parseImportedNumber(getRowValue(normalized, ['beginning_pairs', 'beginning pairs'])),
+    produced: parseImportedNumber(getRowValue(normalized, ['produced'])),
+    sold: parseImportedNumber(getRowValue(normalized, ['sold'])),
+    ending_pairs: parseImportedNumber(getRowValue(normalized, ['ending_pairs', 'ending pairs'])),
+    inventory_value: parseImportedNumber(getRowValue(normalized, ['inventory_value', 'inventory value'])),
+    selling_price: parseImportedNumber(getRowValue(normalized, ['selling_price', 'selling price'])),
+    avg_daily_sales: parseImportedNumber(getRowValue(normalized, ['average_daily_sales', 'avg_daily_sales', 'average daily sales'])),
+    lead_time_days: parseImportedNumber(getRowValue(normalized, ['lead_time_days', 'lead time days'])),
+    safety_stock_days: parseImportedNumber(getRowValue(normalized, ['safety_stock_days', 'safety stock days'])),
+    reorder_point: parseImportedNumber(getRowValue(normalized, ['reorder_point', 'reorder point'])),
+    days_of_stock: parseImportedNumber(getRowValue(normalized, ['days_of_stock', 'days of stock'])),
     status: getRowValue(normalized, ['status']) || 'OK',
   };
 };
@@ -355,7 +365,7 @@ const mapImportedWip = (row) => {
   const normalized = normalizeImportedRow(row);
 
   return {
-    stage: getRowValue(normalized, ['stage']) || 'Imported Stage',
+    stage: getRowValue(normalized, ['stage', 'batch_name']) || 'Imported Stage',
     beginning_pairs: Number(getRowValue(normalized, ['beginning_pairs', 'beginning pairs']) || 0),
     ending_pairs: Number(getRowValue(normalized, ['ending_pairs', 'ending pairs']) || 0),
     avg_cost_per_pair: Number(getRowValue(normalized, ['avg_cost_per_pair', 'avg cost per pair']) || 0),
@@ -365,7 +375,7 @@ const mapImportedWip = (row) => {
 };
 
 const rawMaterialHeaders = [
-  'Material', 'Unit', 'Unit Cost', 'Beginning Qty', 'Received Qty', 'Used Qty', 'Ending Qty', 'Inventory Value', 'Average Daily Usage', 'Max Daily Usage', 'Lead Time (Days)', 'Safety Stock', 'Reorder Point', 'Annual Usage', 'Order Cost', 'Holding Cost %', 'EOQ', 'Status',
+  'Material', 'Unit', 'Unit Cost', 'Beginning Qty', 'Received Qty', 'Used Qty', 'Ending Qty', 'Inventory Value', 'Average Daily Usage', 'Max Daily Usage', 'Lead Time (Days)', 'Safety Stock', 'Safety Stock Factor', 'Reorder Point', 'Annual Usage', 'Order Cost', 'Holding Cost %', 'EOQ', 'Status',
 ];
 
 const finishedGoodHeaders = [
@@ -413,6 +423,7 @@ const getExportRows = (tab, rows) => {
         'Max Daily Usage': row.max_daily_usage ?? 0,
         'Lead Time (Days)': row.lead_time_days ?? 0,
         'Safety Stock': row.safety_stock ?? 0,
+        'Safety Stock Factor': row.safety_stock_factor ?? 0,
         'Reorder Point': row.reorder_point ?? 0,
         'Annual Usage': row.annual_usage ?? 0,
         'Order Cost': row.order_cost ?? 0,
@@ -422,7 +433,6 @@ const getExportRows = (tab, rows) => {
       }));
     case 'finished-goods':
       return sourceRows.map((row) => ({
-        'SKU': row.sku ?? '',
         'Style': row.style ?? '',
         'Size': row.size ?? '',
         'Unit Cost': row.unit_cost ?? 0,
@@ -452,6 +462,7 @@ const getExportRows = (tab, rows) => {
       }));
     case 'wip':
       return sourceRows.map((row) => ({
+        'SKU': row.sku ?? '',
         'Stage': row.stage ?? '',
         'Beginning Pairs': row.beginning_pairs ?? 0,
         'Ending Pairs': row.ending_pairs ?? 0,
@@ -684,17 +695,15 @@ const stepByStep = [
 ];
 
 const API_BASE = '/api';
-
-async function fetchJson(endpoint) {
-  const response = await fetch(`${API_BASE}${endpoint}`);
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-
-  const payload = await response.json();
-  return payload.data ?? payload;
+let csrfToken = '';
+async function apiRequest(endpoint, options = {}) {
+  const headers = { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}), ...options.headers };
+  const response = await fetch(API_BASE + endpoint, { credentials: 'same-origin', ...options, headers });
+  const payload = response.status === 204 ? {} : await response.json().catch(() => ({}));
+  if (!response.ok) { const firstError = payload.errors ? Object.values(payload.errors).flat()[0] : null; throw new Error(firstError || payload.message || ('Request failed: ' + response.status)); }
+  return payload;
 }
+async function fetchJson(endpoint) { const payload = await apiRequest(endpoint); return payload.data ?? payload; }
 
 const initialFinanceSummary = {
   beginning_finished_goods: summaryStats.beginningFinishedGoods,
@@ -709,6 +718,8 @@ function StatusBadge({ status }) {
     OK: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
     REORDER: 'bg-red-100 text-red-700 border border-red-200',
     PRODUCE: 'bg-amber-100 text-amber-700 border border-amber-200',
+    OPEN: 'bg-blue-100 text-blue-700 border border-blue-200',
+    CLOSED: 'bg-slate-100 text-slate-600 border border-slate-200',
   };
 
   return (
@@ -747,9 +758,10 @@ function BomModal({ open, onClose, form, onChange, onSave, rawMaterials }) {
     return null;
   }
 
-  const materialCost = rawMaterials
+  const availableRawMaterials = rawMaterials.filter((material) => String(material.unit ?? '').trim().toLowerCase() !== 'unit');
+  const materialCost = availableRawMaterials
     .filter((material) => form.selected_material_ids.includes(Number(material.id)))
-    .reduce((sum, material) => sum + Number(material.unit_cost ?? 0), 0);
+    .reduce((sum, material) => sum + Number(material.unit_cost ?? 0) * Number(form.material_quantities?.[material.id] ?? 1), 0);
 
   const totalCost = materialCost + Number(form.direct_labor_cost ?? 0) + Number(form.overhead_cost ?? 0);
   const grossProfit = Number(form.selling_price ?? 0) - totalCost;
@@ -764,7 +776,11 @@ function BomModal({ open, onClose, form, onChange, onSave, rawMaterials }) {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="md:col-span-2 block text-sm font-medium text-slate-700">
+          <label className="block text-sm font-medium text-slate-700">
+            Product SKU
+            <input type="text" required value={form.sku || ''} onChange={(event) => onChange('sku', event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="e.g. BASIC-SLIP" />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
             Product Name
             <input
               type="text"
@@ -778,7 +794,7 @@ function BomModal({ open, onClose, form, onChange, onSave, rawMaterials }) {
           <div className="md:col-span-2 rounded-xl border border-slate-200 p-3">
             <p className="mb-2 text-sm font-semibold text-slate-700">Select raw materials</p>
             <div className="grid gap-2 md:grid-cols-2">
-              {rawMaterials.map((material) => {
+              {availableRawMaterials.map((material) => {
                 const checked = form.selected_material_ids.includes(Number(material.id));
                 return (
                   <label key={material.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
@@ -787,7 +803,8 @@ function BomModal({ open, onClose, form, onChange, onSave, rawMaterials }) {
                       checked={checked}
                       onChange={() => onChange('selected_material_ids', checked ? form.selected_material_ids.filter((id) => id !== Number(material.id)) : [...form.selected_material_ids, Number(material.id)])}
                     />
-                    <span>{material.material_name}</span>
+                    <span className="min-w-0 flex-1">{material.material_name}<span className="ml-1 text-xs text-slate-400">({material.unit})</span></span>
+                    {checked ? <input aria-label={material.material_name + ' quantity per unit'} type="number" min="0.001" step="0.001" value={form.material_quantities?.[material.id] ?? 1} onChange={(event) => onChange('material_quantities', { ...form.material_quantities, [material.id]: Number(event.target.value || 0) })} className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm" /> : null}
                   </label>
                 );
               })}
@@ -880,7 +897,7 @@ function BomModal({ open, onClose, form, onChange, onSave, rawMaterials }) {
   );
 }
 
-function DeleteBomModal({ open, onClose, onConfirm, itemName }) {
+function ConfirmDeleteModal({ open, onClose, onConfirm, title, itemName }) {
   if (!open) {
     return null;
   }
@@ -888,7 +905,7 @@ function DeleteBomModal({ open, onClose, onConfirm, itemName }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <h3 className="text-xl font-semibold text-slate-900">Delete BOM item</h3>
+        <h3 className="text-xl font-semibold text-slate-900">{title}</h3>
         <p className="mt-2 text-sm text-slate-600">Are you sure you want to delete <span className="font-semibold text-slate-800">{itemName}</span>? This action cannot be undone.</p>
         <div className="mt-6 flex justify-end gap-3">
           <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Cancel</button>
@@ -900,8 +917,16 @@ function DeleteBomModal({ open, onClose, onConfirm, itemName }) {
 }
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [recordModal, setRecordModal] = useState(null);
+  const [recordForm, setRecordForm] = useState(null);
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
   const [rawMaterials, setRawMaterials] = useState(rawMaterialRows);
   const [finishedGoods, setFinishedGoods] = useState(finishedGoodRows);
+  const [productCatalog, setProductCatalog] = useState([]);
   const [costingRows, setCostingRows] = useState(styleCosting.map((row) => ({
     sku: row.style,
     product_name: row.style,
@@ -922,12 +947,15 @@ function App() {
   const [importMessage, setImportMessage] = useState('');
   const [bomModalOpen, setBomModalOpen] = useState(false);
   const [bomDeleteOpen, setBomDeleteOpen] = useState(false);
+  const [finishedGoodDeleteRow, setFinishedGoodDeleteRow] = useState(null);
   const [bomEditingId, setBomEditingId] = useState(null);
   const [bomDeleteRow, setBomDeleteRow] = useState(null);
   const [bomForm, setBomForm] = useState({
     id: null,
+    sku: '',
     product_name: '',
     selected_material_ids: [],
+    material_quantities: {},
     direct_labor_cost: 0,
     overhead_cost: 0,
     selling_price: 0,
@@ -936,7 +964,7 @@ function App() {
   const getBomFormTotals = (formState = bomForm) => {
     const selectedMaterialCost = rawMaterials
       .filter((material) => formState.selected_material_ids.includes(Number(material.id)))
-      .reduce((sum, material) => sum + Number(material.unit_cost ?? 0), 0);
+      .reduce((sum, material) => sum + Number(material.unit_cost ?? 0) * Number(formState.material_quantities?.[material.id] ?? 1), 0);
 
     const laborCost = Number(formState.direct_labor_cost ?? 0);
     const overheadCost = Number(formState.overhead_cost ?? 0);
@@ -952,8 +980,10 @@ function App() {
     setBomEditingId(null);
     setBomForm({
       id: null,
+      sku: '',
       product_name: '',
       selected_material_ids: [],
+      material_quantities: {},
       direct_labor_cost: 0,
       overhead_cost: 0,
       selling_price: 0,
@@ -971,8 +1001,10 @@ function App() {
     setBomEditingId(Number(row.id ?? row.product_id ?? 0));
     setBomForm({
       id: Number(row.id ?? row.product_id ?? 0),
+      sku: row.sku ?? '',
       product_name: row.product_name ?? '',
       selected_material_ids: selectedMaterialIds,
+      material_quantities: Object.fromEntries((row.materials || []).map((material) => [Number(material.raw_material_id), Number(material.quantity ?? 1)])),
       direct_labor_cost: Number(row.direct_labor_cost ?? 0),
       overhead_cost: Number(row.overhead_cost ?? 0),
       selling_price: Number(row.selling_price ?? 0),
@@ -996,7 +1028,7 @@ function App() {
       return {
         raw_material_id: Number(rawMaterialId),
         material_name: material?.material_name ?? '',
-        quantity: 1,
+        quantity: Number(bomForm.material_quantities?.[rawMaterialId] ?? 1),
         unit_cost_snapshot: Number(material?.unit_cost ?? 0),
       };
     });
@@ -1004,6 +1036,7 @@ function App() {
     const payload = {
       action: bomEditingId ? 'update' : 'create',
       id: bomEditingId || null,
+      sku: bomForm.sku || bomForm.product_name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, ''),
       product_name: bomForm.product_name,
       direct_labor_cost: Number(bomForm.direct_labor_cost ?? 0),
       overhead_cost: Number(bomForm.overhead_cost ?? 0),
@@ -1013,25 +1046,17 @@ function App() {
     };
 
     try {
-      const response = await fetch(`${API_BASE}/bom-costing`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || result?.success === false) {
-        throw new Error(result?.message || 'Failed to save BOM item.');
-      }
+      await apiRequest('/products' + (bomEditingId ? '/' + bomEditingId : ''), { method: bomEditingId ? 'PUT' : 'POST', body: JSON.stringify(payload) });
 
       await refreshDashboardData();
       setBomModalOpen(false);
       setBomEditingId(null);
       setBomForm({
         id: null,
+        sku: '',
         product_name: '',
         selected_material_ids: [],
+        material_quantities: {},
         direct_labor_cost: 0,
         overhead_cost: 0,
         selling_price: 0,
@@ -1044,17 +1069,7 @@ function App() {
 
   const deleteBomItem = async (row) => {
     try {
-      const response = await fetch(`${API_BASE}/bom-costing`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', id: Number(row.id ?? row.product_id ?? 0) }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || result?.success === false) {
-        throw new Error(result?.message || 'Failed to delete BOM item.');
-      }
+      await apiRequest('/products/' + Number(row.id ?? row.product_id ?? 0), { method: 'DELETE' });
 
       await refreshDashboardData();
       setBomDeleteOpen(false);
@@ -1068,60 +1083,77 @@ function App() {
   const refreshDashboardData = async () => {
 
     try {
-      const [rawData, finishedData, costingData, financeData] = await Promise.all([
-        fetchJson('/raw-materials'),
-        fetchJson('/finished-goods'),
-        fetchJson('/bom-costing'),
-        fetchJson('/financials/cogm-cogs'),
-      ]);
+      const [rawData, finishedData, costingData, productData, wipData, financeData] = await Promise.all([fetchJson('/raw-materials'), fetchJson('/finished-goods'), fetchJson('/bom-costing'), fetchJson('/products'), fetchJson('/wip'), fetchJson('/financials/cogm-cogs')]);
+      setRawMaterials((rawData || []).map(normalizeLiveRawMaterialRow));
+      setFinishedGoods((finishedData || []).map(normalizeLiveFinishedGoodRow));
+      setCostingRows((costingData || []).map(normalizeLiveCostingRow));
+      setProductCatalog(productData || []);
+      setWipRowsState((wipData || []).map(normalizeLiveWipRow));
+      setDataSource('database'); setError('');
 
-      const hasLiveData = Array.isArray(rawData) && rawData.length > 0 && Array.isArray(finishedData) && finishedData.length > 0;
-
-      if (hasLiveData) {
-        setRawMaterials(rawData.map(normalizeLiveRawMaterialRow));
-        setFinishedGoods(finishedData.map(normalizeLiveFinishedGoodRow));
-        setDataSource('database');
-        setError('');
-      } else {
-        setDataSource('workbook');
-      }
-
-      if (Array.isArray(costingData) && costingData.length > 0) {
-        setCostingRows(costingData.map(normalizeLiveCostingRow));
-      }
-
-      if (financeData) {
-        setFinanceSummary(financeData);
-      }
-
-      return { rawData, finishedData, costingData, financeData };
+      if (financeData) setFinanceSummary(financeData);
+      return { rawData, finishedData, costingData, productData, wipData, financeData };
     } catch (loadError) {
-      setDataSource('workbook');
-      setError('Live MySQL data is not available yet, so the workbook-backed figures are being shown instead.');
+      if (loadError.message.includes('401')) { setUser(null); return null; }
+      setDataSource('workbook'); setError(loadError.message || 'Live inventory data could not be loaded.');
       return null;
     }
   };
 
   useEffect(() => {
-    let mounted = true;
-
-    const loadLiveData = async () => {
-      const result = await refreshDashboardData();
-      if (!mounted) {
-        return;
-      }
-
-      if (result) {
-        setLoading(false);
-      }
+    let active = true;
+    const initialize = async () => {
+      try {
+        const response = await fetch(API_BASE + '/auth/csrf', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+        const csrf = await response.json(); csrfToken = csrf.csrf_token || ''; setSetupRequired(Boolean(csrf.setup_required));
+        try { const session = await fetchJson('/auth/me'); if (active) setUser(session.user); } catch {}
+      } catch { if (active) setError('Unable to connect to the Laravel API. Start the backend and refresh this page.'); }
+      if (active) setAuthReady(true);
     };
-
-    loadLiveData();
-
-    return () => {
-      mounted = false;
-    };
+    initialize(); return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let active = true; refreshDashboardData().finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user]);
+
+  const handleAuthSubmit = async (credentials) => {
+    setAuthError('');
+    try { const payload = await apiRequest('/auth/' + (setupRequired ? 'register' : 'login'), { method: 'POST', body: JSON.stringify(credentials) }); setUser(payload.user); setSetupRequired(false); }
+    catch (error) { setAuthError(error.message); }
+  };
+  const handleLogout = async () => { try { await apiRequest('/auth/logout', { method: 'POST' }); } finally { setUser(null); try { const response = await fetch(API_BASE + '/auth/csrf', { credentials: 'same-origin' }); const payload = await response.json(); csrfToken = payload.csrf_token || ''; setSetupRequired(Boolean(payload.setup_required)); } catch {} } };
+  const canWrite = user && ['admin', 'manager'].includes(user.role);
+  const canDelete = user && ['admin', 'manager'].includes(user.role);
+  const recordConfig = {
+    'raw-materials': { title: 'raw material', endpoint: '/raw-materials', fields: [['material_name','Material name'],['category','Category'],['unit','Unit'],['unit_cost','Unit cost','number'],['beginning_stock','Beginning stock','number'],['received','Received','number'],['usage_gross','Used','number'],['daily_usage','Daily usage','number'],['annual_demand','Annual demand','number'],['lead_time_days','Lead time (days)','number'],['safety_stock_factor','Safety stock factor','number'],['holding_cost','Holding cost','number'],['ordering_cost','Ordering cost','number']] },
+    'finished-goods': { title: 'finished good', endpoint: '/finished-goods', fields: [['sku','SKU'],['product_name','Product name'],['size','Size'],['unit_cost','Unit cost','number'],['beginning_stock','Beginning stock','number'],['production','Produced','number'],['sold','Sold','number'],['selling_price','Selling price','number'],['monthly_sales_rate','Monthly sales rate','number'],['lead_time','Lead time (days)','number'],['buffer','Buffer days','number'],['safety_stock','Safety stock','number']] },
+    wip: { title: 'WIP stage', endpoint: '/wip', fields: [['batch_name','Stage'],['beginning_pairs','Beginning pairs','number'],['ending_pairs','Ending pairs','number'],['avg_cost_per_pair','Average cost per pair','number'],['status','Status','select']] },
+  };
+  const openRecordEditor = (tab, row = null) => {
+    const config = recordConfig[tab]; const fields = config.fields.map(([name,label,type]) => ({name,label,type}));
+    if (tab === 'wip') { fields[4].options = [{value:'OPEN',label:'Open'},{value:'CLOSED',label:'Closed'}]; }
+    const values = row ? {...row} : Object.fromEntries(fields.map((f) => [f.name, f.name === 'status' ? 'OPEN' : f.type === 'number' ? 0 : '']));
+    setRecordModal({config,fields}); setRecordForm(values);
+  };
+  const saveRecord = async (event) => {
+    event.preventDefault(); const config = recordModal.config;
+    try { await apiRequest(config.endpoint + (recordForm.id ? '/' + recordForm.id : ''), {method:recordForm.id?'PUT':'POST',body:JSON.stringify(recordForm)}); await refreshDashboardData(); setRecordModal(null); setRecordForm(null); setImportMessage(config.title + ' saved.'); }
+    catch (error) { setImportMessage(error.message); }
+  };
+  const deleteRecord = async (tab,row,confirmed=false) => {
+    const config=recordConfig[tab];
+    if (tab === 'finished-goods' && !confirmed) { setFinishedGoodDeleteRow(row); return; }
+    if (!confirmed && !window.confirm('Delete this ' + config.title + '? This cannot be undone.')) return;
+    try {
+      await apiRequest(config.endpoint + '/' + row.id,{method:'DELETE'});
+      await refreshDashboardData();
+      if (tab === 'finished-goods') { setFinishedGoodDeleteRow(null); }
+    }
+    catch(error) { setImportMessage(error.message); }
+  };
 
   const deduplicateImportRows = (rows, keyNames) => {
     const seen = new Set();
@@ -1177,7 +1209,6 @@ function App() {
         monthly_sales_rate: Number(row.avg_daily_sales ?? 0),
         lead_time: Number(row.lead_time_days ?? 0),
         buffer: Number(row.safety_stock_days ?? 0),
-        safety_stock: Number(row.reorder_point ?? 0),
         reorder_point: Number(row.reorder_point ?? 0),
         days_of_stock: Number(row.days_of_stock ?? 0),
         status: row.status || 'OK',
@@ -1185,7 +1216,7 @@ function App() {
     }
 
     if (tab === 'bom-costing') {
-      endpoint = '/bom-costing';
+      endpoint = '/products';
       payload = uniqueRows.map((row) => ({
         sku: row.sku || row.product_name || 'NEW',
         product_name: row.product_name || row.style || 'Imported Product',
@@ -1199,29 +1230,15 @@ function App() {
     if (tab === 'wip') {
       endpoint = '/wip';
       payload = uniqueRows.map((row) => ({
-        stage: row.stage || 'Imported Stage',
         batch_name: row.stage || 'Imported Stage',
-        quantity_in_process: Number(row.beginning_pairs ?? 0),
-        direct_material_cost: Number(row.beginning_value ?? 0),
-        direct_labor_cost: Number(row.avg_cost_per_pair ?? 0),
-        overhead_cost: Number(row.ending_value ?? 0),
+        beginning_pairs: Number(row.beginning_pairs ?? 0),
+        ending_pairs: Number(row.ending_pairs ?? 0),
+        avg_cost_per_pair: Number(row.avg_cost_per_pair ?? 0),
         status: 'OPEN',
       }));
     }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: payload }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok || result?.success === false) {
-      throw new Error(result?.message || 'Database import failed.');
-    }
-
-    return result;
+    return apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ rows: payload }) });
   };
 
   const handleImportCsv = async (event) => {
@@ -1305,7 +1322,8 @@ function App() {
   const renderActiveTable = () => {
     if (activeTab === 'raw-materials') {
       return (
-        <TableCard title="Raw Materials Inventory" subtitle="Workbook raw-material logic with CSV import/export support">
+        <TableCard title="Raw Materials Inventory" subtitle="Inventory levels and replenishment calculations">
+          <div className="mb-4 flex justify-end">{canWrite ? <button onClick={() => openRecordEditor('raw-materials')} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">Add material</button> : null}</div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead>
@@ -1320,6 +1338,7 @@ function App() {
                   <th className="pb-3 pr-3 font-medium">EOQ</th>
                   <th className="pb-3 pr-3 font-medium">Reorder pt.</th>
                   <th className="pb-3 pr-3 font-medium">Status</th>
+                  {canWrite ? <th className="pb-3 font-medium">Actions</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1335,6 +1354,7 @@ function App() {
                     <td className="py-3 pr-3 text-slate-600">{formatNumber(row.eoq ?? 0, 1)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatNumber(row.reorder_point ?? 0, 1)}</td>
                     <td className="py-3"><StatusBadge status={row.status} /></td>
+                    {canWrite ? <td className="py-3"><button onClick={() => openRecordEditor('raw-materials',row)} className="rounded border px-2 py-1 text-xs">Edit</button>{canDelete ? <button onClick={() => deleteRecord('raw-materials',row)} className="ml-2 rounded border border-red-200 px-2 py-1 text-xs text-red-700">Delete</button> : null}</td> : null}
                   </tr>
                 ))}
               </tbody>
@@ -1346,7 +1366,8 @@ function App() {
 
     if (activeTab === 'finished-goods') {
       return (
-        <TableCard title="Finished Goods" subtitle="Workbook finished-goods cycle and safety stock view">
+        <TableCard title="Finished Goods" subtitle="Stock levels, value, and reorder planning">
+          <div className="mb-4 flex justify-end">{canWrite ? <button onClick={() => openRecordEditor('finished-goods')} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">Add finished good</button> : null}</div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead>
@@ -1358,11 +1379,13 @@ function App() {
                   <th className="pb-3 pr-3 font-medium">Produced</th>
                   <th className="pb-3 pr-3 font-medium">Sold</th>
                   <th className="pb-3 pr-3 font-medium">Ending</th>
+                  <th className="pb-3 pr-3 font-medium">Inventory Value</th>
                   <th className="pb-3 pr-3 font-medium">Unit Cost</th>
                   <th className="pb-3 pr-3 font-medium">Selling Price</th>
                   <th className="pb-3 pr-3 font-medium">Reorder Pt.</th>
                   <th className="pb-3 pr-3 font-medium">Days Stock</th>
                   <th className="pb-3 font-medium">Status</th>
+                  {canWrite ? <th className="pb-3 font-medium">Actions</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1375,11 +1398,13 @@ function App() {
                     <td className="py-3 pr-3 text-slate-600">{formatNumber(row.produced ?? 0, 1)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatNumber(row.sold ?? 0, 1)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatNumber(row.ending_pairs ?? row.ending_stock ?? 0, 1)}</td>
+                    <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.inventory_value ?? row.ending_value ?? 0)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.unit_cost ?? 0)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.selling_price ?? 0)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatNumber(row.reorder_point ?? 0, 1)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatNumber(row.days_of_stock ?? 0, 1)}</td>
                     <td className="py-3"><StatusBadge status={row.status} /></td>
+                    {canWrite ? <td className="py-3"><button onClick={() => openRecordEditor('finished-goods',row)} className="rounded border px-2 py-1 text-xs">Edit</button>{canDelete ? <button onClick={() => deleteRecord('finished-goods',row)} className="ml-2 rounded border border-red-200 px-2 py-1 text-xs text-red-700">Delete</button> : null}</td> : null}
                   </tr>
                 ))}
               </tbody>
@@ -1393,15 +1418,17 @@ function App() {
       return (
         <TableCard title="BOM & Costing" subtitle="Material cost, labor, overhead, gross profit, and gross margin">
           <div className="mb-4 flex justify-end">
-            <button type="button" onClick={openBomAddModal} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Add BOM</button>
+            {canWrite ? <button type="button" onClick={openBomAddModal} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Add BOM</button> : null}
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead>
                 <tr className="text-slate-500">
                   <th className="pb-3 pr-3 font-medium">Actions</th>
+                  <th className="pb-3 pr-3 font-medium">SKU</th>
                   <th className="pb-3 pr-3 font-medium">Product</th>
-                  <th className="pb-3 pr-3 font-medium">Materials</th>
+                  <th className="pb-3 pr-3 font-medium">BOM Materials / Qty</th>
+                  <th className="pb-3 pr-3 font-medium">Material Cost</th>
                   <th className="pb-3 pr-3 font-medium">Labor</th>
                   <th className="pb-3 pr-3 font-medium">Overhead</th>
                   <th className="pb-3 pr-3 font-medium">Total Cost</th>
@@ -1411,15 +1438,17 @@ function App() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {costingRows.map((row) => (
+                {costingRows.length === 0 ? <tr><td colSpan={11} className="py-12 text-center"><p className="font-medium text-slate-800">No BOM records yet</p><p className="mt-1 text-sm text-slate-500">Use Add BOM to create a product recipe and costing.</p></td></tr> : costingRows.map((row) => (
                   <tr key={String(row.id ?? row.sku ?? row.product_name ?? row.style ?? 'bom-item')} className="align-middle">
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => openBomEditModal(row)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">Edit</button>
-                        <button type="button" onClick={() => { setBomDeleteRow(row); setBomDeleteOpen(true); }} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700">Delete</button>
+                        {canWrite ? <button type="button" onClick={() => openBomEditModal(row)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">Edit</button> : null}
+                        {canDelete ? <button type="button" onClick={() => { setBomDeleteRow(row); setBomDeleteOpen(true); }} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700">Delete</button> : null}
                       </div>
                     </td>
+                    <td className="py-3 pr-3 font-mono text-xs text-slate-600">{row.sku}</td>
                     <td className="py-3 pr-3 font-medium text-slate-800">{row.product_name || row.style}</td>
+                    <td className="py-3 pr-3 text-slate-600"><div className="space-y-1">{(row.materials || []).map((material) => <div key={material.raw_material_id}>{material.material_name} × {formatNumber(material.quantity, 3)} {material.unit || ''}</div>)}</div></td>
                     <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.direct_material_cost ?? row.materialCost ?? 0)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.direct_labor_cost ?? row.laborPerPair ?? 0)}</td>
                     <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.overhead_cost ?? row.overheadPerPair ?? 0)}</td>
@@ -1437,7 +1466,8 @@ function App() {
     }
 
     return (
-      <TableCard title="Work-in-Process" subtitle="Workbook WIP stages and values">
+      <TableCard title="Work-in-Process" subtitle="Plant-wide production stages; raw material usage remains managed through BOM & Costing">
+        <div className="mb-4 flex justify-end">{canWrite ? <button onClick={() => openRecordEditor('wip')} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">Add WIP stage</button> : null}</div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
             <thead>
@@ -1448,17 +1478,21 @@ function App() {
                 <th className="pb-3 pr-3 font-medium">Avg Cost</th>
                 <th className="pb-3 pr-3 font-medium">Beg Value</th>
                 <th className="pb-3 font-medium">End Value</th>
+                <th className="pb-3 pr-3 font-medium">Status</th>
+                {canWrite ? <th className="pb-3 font-medium">Actions</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {wipRowsState.map((row) => (
-                <tr key={row.stage} className="align-middle">
+                <tr key={row.id ?? row.stage} className="align-middle">
                   <td className="py-3 pr-3 font-medium text-slate-800">{row.stage}</td>
                   <td className="py-3 pr-3 text-slate-600">{formatNumber(row.beginning_pairs ?? 0, 0)}</td>
                   <td className="py-3 pr-3 text-slate-600">{formatNumber(row.ending_pairs ?? 0, 0)}</td>
                   <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.avg_cost_per_pair ?? 0)}</td>
                   <td className="py-3 pr-3 text-slate-600">{formatCurrency(row.beginning_value ?? 0)}</td>
                   <td className="py-3 text-slate-600">{formatCurrency(row.ending_value ?? 0)}</td>
+                  <td className="py-3 pr-3"><StatusBadge status={row.status ?? 'OPEN'} /></td>
+                  {canWrite ? <td className="py-3"><button onClick={() => openRecordEditor('wip',row)} className="rounded border px-2 py-1 text-xs">Edit</button>{canDelete ? <button onClick={() => deleteRecord('wip',row)} className="ml-2 rounded border border-red-200 px-2 py-1 text-xs text-red-700">Delete</button> : null}</td> : null}
                 </tr>
               ))}
             </tbody>
@@ -1468,6 +1502,9 @@ function App() {
     );
   };
 
+  if (!authReady) return <div className="flex min-h-screen items-center justify-center">Connecting to inventory…</div>;
+  if (!user) return <AuthPanel setupRequired={setupRequired} error={authError || error} onSubmit={handleAuthSubmit} />;
+
   return (
     <div className="min-h-screen bg-slate-100 p-6 text-slate-800">
       <div className="mx-auto max-w-7xl">
@@ -1476,11 +1513,11 @@ function App() {
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Slipper Manufacturing</p>
             <h1 className="text-3xl font-bold text-slate-900">Inventory & Manufacturing Control</h1>
           </div>
-          <div className="flex items-center gap-3">
-            <label className="cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
+          <div className="flex flex-wrap items-center gap-3"><span className="text-sm text-slate-600">{user.name} · {user.role}</span>{user.role === 'admin' ? <button onClick={() => setUserManagementOpen(true)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm">Manage users</button> : null}<button onClick={handleLogout} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm">Sign out</button>
+            {canWrite && activeTab !== 'bom-costing' ? <label className="cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
               Import CSV
               <input type="file" accept=".csv" className="hidden" onChange={handleImportCsv} />
-            </label>
+            </label> : null}
             <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700" onClick={downloadTemplateForCurrentTab}>Download CSV Template</button>
             <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700" onClick={exportCurrentTab}>Export CSV</button>
           </div>
@@ -1511,6 +1548,8 @@ function App() {
           </div>
         ) : null}
 
+        {userManagementOpen ? <UserManagement request={apiRequest} onClose={() => setUserManagementOpen(false)} /> : null}
+        <RecordModal title={recordModal?.config.title} fields={recordModal?.fields || []} value={recordForm} onChange={(field,value)=>setRecordForm((current)=>({...current,[field]:value}))} onClose={()=>{setRecordModal(null);setRecordForm(null);}} onSave={saveRecord} />
         <BomModal
           open={bomModalOpen}
           onClose={() => setBomModalOpen(false)}
@@ -1518,7 +1557,12 @@ function App() {
           rawMaterials={rawMaterials}
           onChange={(field, value) => {
             if (field === 'selected_material_ids') {
-              setBomForm((current) => ({ ...current, selected_material_ids: value }));
+              setBomForm((current) => ({ ...current, selected_material_ids: value, material_quantities: { ...current.material_quantities, ...Object.fromEntries(value.map((id) => [id, current.material_quantities?.[id] ?? 1])) } }));
+              return;
+            }
+
+            if (field === 'material_quantities') {
+              setBomForm((current) => ({ ...current, material_quantities: value }));
               return;
             }
 
@@ -1527,11 +1571,20 @@ function App() {
           onSave={saveBomForm}
         />
 
-        <DeleteBomModal
+        <ConfirmDeleteModal
           open={bomDeleteOpen}
           onClose={() => { setBomDeleteOpen(false); setBomDeleteRow(null); }}
+          title="Delete BOM item"
           itemName={bomDeleteRow?.product_name ?? 'this BOM item'}
           onConfirm={() => deleteBomItem(bomDeleteRow)}
+        />
+
+        <ConfirmDeleteModal
+          open={Boolean(finishedGoodDeleteRow)}
+          onClose={() => setFinishedGoodDeleteRow(null)}
+          title="Delete finished good"
+          itemName={finishedGoodDeleteRow ? `${finishedGoodDeleteRow.product_name || finishedGoodDeleteRow.style || 'this finished good'}${finishedGoodDeleteRow.sku ? ` (${finishedGoodDeleteRow.sku})` : ''}` : 'this finished good'}
+          onConfirm={() => deleteRecord('finished-goods', finishedGoodDeleteRow, true)}
         />
 
         <nav className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-soft">
